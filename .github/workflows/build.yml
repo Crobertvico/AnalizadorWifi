@@ -1,0 +1,57 @@
+name: Compilar APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Descomprimir el proyecto si se subió como ZIP
+        run: |
+          if [ ! -f settings.gradle.kts ]; then
+            ZIP=$(ls *.zip 2>/dev/null | head -n 1)
+            if [ -z "$ZIP" ]; then
+              echo "No se encontró el proyecto ni un archivo .zip"; exit 1
+            fi
+            mkdir -p /tmp/proyecto
+            unzip -q -o "$ZIP" -d /tmp/proyecto
+            RAIZ=$(dirname "$(find /tmp/proyecto -name settings.gradle.kts | head -n 1)")
+            cp -a "$RAIZ"/. .
+          fi
+          chmod +x gradlew
+          ls -la
+
+      - name: Instalar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compilar APK de prueba (debug)
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Publicar APK debug
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnalizadorWiFi-debug
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Compilar APK optimizado (release, más liviano)
+        id: release
+        continue-on-error: true
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Publicar APK release
+        if: steps.release.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnalizadorWiFi-release
+          path: app/build/outputs/apk/release/*.apk
